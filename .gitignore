@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.spec
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User files
+.note_image_generator_presets.json
+
+# 個人ファイル（公開しない）
+素材/
+メモ/
+
+# 内部・冗長・一時物（公開しない）
+引き継ぎ.md
+公開版/
+_*.png
+_*.py
+*.tmp
+*.tmp.*

@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ととのえ — note画像ととのえツール</title>
+<meta name="description" content="アップロードした画像を、noteのヘッダーにちょうどいい1920×1006pxへ自動でととのえます。すべてブラウザ内で処理。">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<!-- OGP / Twitter（公開時：配信先に合わせて og:url / og:image の絶対URLを確認） -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="ととのえ — note画像ととのえツール">
+<meta property="og:description" content="画像を note 最適の 1920×1006px へ自動でととのえる。すべてブラウザ内で処理。">
+<meta property="og:image" content="https://kinomeno.github.io/note-image-generator/ogp.png">
+<meta property="og:url" content="https://kinomeno.github.io/note-image-generator/">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{
+    --ink:#1d1d22; --sub:#5f5f68; --mute:#9a9aa2; --line:#e4e4e8; --line2:#eeeef1;
+    --bg:#fff; --soft:#fafafa; --dark:#2f2f36; --sel:#2f2f33;
+    --accent:#5f8276; --accent-deep:#496b5f; --accent-soft:#eef3f1;
+    --serif:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP","Times New Roman",serif;
+    --sans:"Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);
+    display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+
+  /* ヘッダー（細め） */
+  .hdr{display:flex;align-items:center;justify-content:space-between;
+    padding:9px 26px;border-bottom:1px solid var(--line2);flex:0 0 auto;}
+  .brand{display:flex;align-items:baseline;gap:13px;}
+  .logo{font-family:var(--serif);font-size:1.28rem;font-weight:500;letter-spacing:.06em;color:var(--ink);user-select:none;}
+  .logo .ac{color:var(--accent);}
+  .brand .tag{font-size:.78rem;color:var(--sub);}
+  .brand .ver{font-size:.7rem;color:var(--mute);letter-spacing:.02em;}
+  .btn-line{font-size:.82rem;font-weight:600;color:var(--ink);background:#fff;border:1px solid #d7d7dc;
+    border-radius:9px;padding:7px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:.15s;}
+  .btn-line:hover{border-color:var(--accent);color:var(--accent-deep);}
+  .btn-line .plus{color:var(--accent);font-size:.95rem;}
+  /* 解放マーク（最小） */
+  .pro-mark{width:26px;height:26px;border-radius:50%;border:1px solid #cfe0da;background:var(--accent-soft);
+    color:var(--accent-deep);display:inline-flex;align-items:center;justify-content:center;font-size:.82rem;
+    cursor:pointer;}
+
+  /* メイン（縦スクロールを出さない） */
+  main{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:16px 26px 6px;}
+  section{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
+
+  /* 投入前 */
+  #stageEmpty{justify-content:center;gap:4px;}
+  .lead{font-size:.98rem;font-weight:600;color:var(--ink);line-height:1.75;margin:16px auto 2px;max-width:760px;text-align:center;}
+  .lead b{color:var(--accent-deep);font-weight:800;}
+  .drop{flex:0 0 auto;min-height:46vh;border:1.5px dashed #d4d4da;border-radius:14px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:.18s;background:var(--bg);}
+  .drop:hover,.drop.over{border-color:var(--accent);background:var(--accent-soft);}
+  .drop .ico{width:52px;height:52px;margin-bottom:13px;border:2px solid #cdcdd4;border-radius:12px;
+    display:flex;align-items:center;justify-content:center;font-size:1.45rem;color:#a9a9b1;}
+  .drop.over .ico{border-color:var(--accent);color:var(--accent);}
+  .drop .big{font-size:1.04rem;font-weight:700;}
+  .drop .mid{font-size:.88rem;color:var(--sub);margin-top:7px;}
+  .drop .ext{font-size:.82rem;color:var(--mute);margin-top:5px;letter-spacing:.03em;}
+
+  /* 作業エリア */
+  .work{flex:0 0 auto;display:grid;grid-template-columns:160px 1fr;gap:24px;align-items:start;}
+  .mini{display:flex;flex-direction:column;}
+  .mini .lbl{font-size:.8rem;font-weight:700;margin-bottom:7px;color:var(--sub);}
+  .mini .photo{border:1px solid var(--line);background:#fff;border-radius:6px;overflow:hidden;
+    display:flex;align-items:center;justify-content:center;max-height:160px;}
+  .mini .photo img{max-width:100%;max-height:158px;width:auto;height:auto;display:block;}
+  .mini .note{font-size:.73rem;color:var(--mute);margin-top:7px;line-height:1.5;}
+  .preview{display:flex;flex-direction:column;min-width:0;}
+  .preview .lbl{font-size:.88rem;font-weight:700;margin-bottom:8px;}
+  .preview .lbl .dim{color:var(--sub);font-weight:400;font-size:.82rem;}
+  .preview .photo{display:flex;align-items:center;justify-content:center;}
+  #prevCanvas{max-width:100%;max-height:38vh;width:auto;height:auto;display:block;
+    border:1.5px solid #b9b9c2;border-radius:3px;box-shadow:0 2px 12px rgba(20,20,30,.08);touch-action:none;}
+  #prevCanvas.grabbable{cursor:grab;}
+  #prevCanvas.grabbable:active{cursor:grabbing;}
+
+  /* 主役：サイズスライダー */
+  .size-control{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:14px;
+    width:100%;max-width:600px;margin:16px auto 4px;}
+  .size-control label{font-size:.86rem;font-weight:700;color:var(--ink);white-space:nowrap;}
+  .size-control .val{font-size:.84rem;font-weight:600;color:var(--accent-deep);width:46px;text-align:right;}
+  .size-control input[type=range]{-webkit-appearance:none;appearance:none;flex:1;height:7px;border-radius:4px;
+    background:#e3e3e8;cursor:pointer;}
+  .size-control input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:24px;height:24px;border-radius:50%;
+    background:var(--accent);border:3px solid #fff;box-shadow:0 1px 5px rgba(20,20,30,.3);cursor:pointer;}
+  .size-control input[type=range]::-moz-range-thumb{width:24px;height:24px;border-radius:50%;
+    background:var(--accent);border:3px solid #fff;box-shadow:0 1px 5px rgba(20,20,30,.3);cursor:pointer;}
+
+  /* テキスト入力（無料：1行） */
+  .text-control{flex:0 0 auto;display:flex;align-items:center;justify-content:center;gap:12px;
+    width:100%;max-width:600px;margin:6px auto 2px;}
+  .text-control label{font-size:.86rem;font-weight:700;color:var(--ink);white-space:nowrap;}
+  .text-control input{flex:1;max-width:430px;font-size:.9rem;padding:8px 12px;
+    border:1px solid var(--line);border-radius:8px;}
+  .text-control input:focus{outline:none;border-color:var(--accent);}
+  .sw.textauto{display:inline-flex;align-items:center;justify-content:center;background:#fff;
+    color:#555;font-size:.72rem;font-weight:700;}
+
+  /* こまかい設定（折り畳み） */
+  .detail{flex:0 0 auto;margin-top:12px;border-top:1px solid var(--line2);padding-top:8px;}
+  .detail-toggle{display:inline-flex;align-items:center;gap:7px;font-size:.82rem;font-weight:700;color:var(--ink);
+    background:none;border:none;cursor:pointer;padding:4px 0;}
+  .detail-toggle .chev{font-size:.7rem;color:var(--sub);transition:transform .18s;}
+  .detail.open .detail-toggle .chev{transform:rotate(90deg);}
+  .detail-panel{display:none;gap:22px;flex-wrap:wrap;align-items:flex-end;padding:12px 2px 4px;}
+  .detail.open .detail-panel{display:flex;}
+  .field label{display:block;font-size:.74rem;font-weight:700;margin-bottom:7px;color:var(--ink);}
+  .field label .hint{color:var(--sub);font-weight:400;font-size:.7rem;}
+  .pills{display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+  .pill{font-size:.79rem;font-weight:500;padding:7px 13px;border-radius:8px;border:1px solid var(--line);
+    background:#fff;color:#4a4a52;cursor:pointer;transition:.12s;}
+  .pill.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .pill.add{color:var(--sub);border-style:dashed;}
+  .custom-form{display:none;gap:6px;align-items:center;}
+  .custom-form.show{display:inline-flex;}
+  .custom-form input{width:64px;font-size:.78rem;padding:6px 8px;border:1px solid var(--line);border-radius:7px;}
+  .custom-form button{font-size:.78rem;font-weight:600;padding:6px 11px;border:none;border-radius:7px;background:var(--accent);color:#fff;cursor:pointer;}
+  .select{font-size:.81rem;padding:7px 12px;border:1px solid var(--line);border-radius:8px;background:#fff;cursor:pointer;color:var(--ink);}
+  .swatches{display:flex;gap:7px;align-items:center;}
+  .sw{width:26px;height:26px;border-radius:50%;border:1px solid #d4d4d9;cursor:pointer;padding:0;}
+  .sw.sel{box-shadow:0 0 0 2px #fff,0 0 0 4px var(--accent);}
+  .sw.custom{overflow:hidden;position:relative;background:conic-gradient(#e08585,#e0d585,#88c898,#86c8c8,#8a9ad0,#c79ad0,#e08585);}
+  .sw.custom input{position:absolute;inset:-4px;opacity:0;cursor:pointer;}
+  .range-wrap{display:flex;align-items:center;gap:9px;}
+  .range-wrap input[type=range]{width:130px;accent-color:var(--accent);cursor:pointer;}
+  .range-wrap .val{font-size:.76rem;color:var(--sub);width:38px;text-align:right;}
+
+  /* リセット */
+  .resetbar{flex:0 0 auto;text-align:center;padding:10px 0 4px;}
+  .btn-reset{font-size:.82rem;font-weight:600;color:var(--sub);background:transparent;border:none;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+  .btn-reset:hover{color:var(--ink);}
+
+  footer{flex:0 0 auto;padding:8px 92px 8px 26px;font-size:.76rem;color:var(--mute);border-top:1px solid var(--line2);
+    display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+  .foot-meta{display:flex;align-items:center;gap:16px;flex-wrap:wrap;}
+  .foot-meta a{color:var(--sub);text-decoration:none;font-weight:500;transition:color .15s;letter-spacing:.01em;}
+  .foot-meta a:hover{color:var(--accent-deep);}
+  .foot-meta .sig{color:var(--accent-deep);font-weight:600;}
+  .support-group{display:inline-flex;align-items:center;gap:9px;padding:3px 11px;
+    background:var(--accent-soft);border:1px solid #d8e7e1;border-radius:999px;}
+  .support-label{font-size:.72rem;font-weight:700;color:var(--accent-deep);letter-spacing:.02em;}
+  .lang-toggle{font-size:.72rem;font-weight:700;color:var(--sub);background:none;border:1px solid #e2e2e6;
+    border-radius:999px;padding:2px 10px;cursor:pointer;transition:.15s;}
+  .lang-toggle:hover{border-color:var(--accent);color:var(--accent-deep);}
+  .pos-wrap{display:flex;align-items:center;gap:6px;}
+  .pos-wrap span{font-size:.72rem;color:var(--sub);}
+  .pos-wrap input[type=range]{width:66px;accent-color:var(--accent);cursor:pointer;}
+  .mini-btn{font-size:.78rem;border:1px solid var(--line);background:#fff;border-radius:7px;padding:4px 8px;cursor:pointer;color:var(--sub);}
+  .mini-btn:hover{border-color:var(--accent);color:var(--accent-deep);}
+  .panel-features{margin:14px 0 0;padding:12px 14px;background:var(--soft);
+    border:1px solid var(--line);border-radius:10px;}
+  .panel-features .ft{font-size:.8rem;font-weight:700;color:var(--ink);margin-bottom:8px;}
+  .panel-features ul{margin:0;padding-left:18px;}
+  .panel-features li{font-size:.79rem;color:#3a3a40;line-height:1.85;}
+  .get-cta{display:block;text-align:center;margin-top:13px;padding:12px 14px;border-radius:11px;
+    background:var(--accent);border:1px solid var(--accent);color:#fff;font-size:.9rem;font-weight:700;
+    text-decoration:none;transition:.15s;box-shadow:0 4px 14px rgba(95,130,118,.32);}
+  .get-cta:hover{background:var(--accent-deep);transform:translateY(-1px);}
+
+  /* フロートDL */
+  .fab{position:fixed;right:24px;bottom:22px;width:56px;height:56px;border-radius:15px;
+    background:var(--dark);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;
+    box-shadow:0 10px 24px rgba(20,20,30,.26);z-index:30;transition:.15s;}
+  .fab:hover{background:#1f1f24;transform:translateY(-1px);}
+  .fab.disabled{background:#d7d7db;box-shadow:none;cursor:default;transform:none;}
+  .fab svg{width:25px;height:25px;}
+
+  /* パネル */
+  .backdrop{position:fixed;inset:0;background:rgba(20,20,28,.16);z-index:40;display:none;}
+  .backdrop.show{display:block;}
+  .panel{position:fixed;right:24px;top:60px;width:330px;max-height:calc(100vh - 90px);overflow-y:auto;
+    background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 18px 50px rgba(20,20,30,.22);padding:20px;z-index:50;display:none;}
+  .panel.show{display:block;}
+  .panel .ph{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;}
+  .panel .ph .t{font-size:.96rem;font-weight:700;}
+  .panel .ph .x{color:var(--mute);font-size:1.05rem;cursor:pointer;background:none;border:none;}
+  .panel .desc{font-size:.82rem;color:var(--sub);line-height:1.6;margin-bottom:13px;}
+  .panel input{width:100%;font-size:.9rem;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:#fdfdfd;margin-bottom:11px;}
+  .panel input:focus{outline:none;border-color:var(--accent);}
+  .panel .unlock{width:100%;font-size:.9rem;font-weight:700;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:12px;cursor:pointer;transition:.15s;}
+  .panel .unlock:hover{background:var(--accent-deep);}
+  .panel .err{font-size:.78rem;color:#b5524a;margin-top:9px;min-height:1em;}
+  .panel .help{font-size:.78rem;color:var(--sub);margin-top:11px;line-height:1.6;}
+  .panel .help a{color:var(--accent-deep);font-weight:700;text-decoration:underline;}
+
+  .hidden{display:none !important;}
+
+  /* === テスト用トグル（公開版では削除） === */
+  #testToggle{position:fixed;top:7px;left:50%;transform:translateX(-50%);z-index:60;
+    font-size:.72rem;font-weight:700;padding:5px 13px;border-radius:999px;
+    border:1px dashed #c0392b;background:#fff5f4;color:#b5524a;cursor:pointer;white-space:nowrap;}
+  #testToggle:hover{background:#ffe9e6;}
+
+  /* モバイル：横スクロール禁止・縦スクロール許可 */
+  @media (max-width:760px){
+    html,body{height:auto;}
+    body{min-height:100vh;overflow-x:hidden;overflow-y:auto;}
+    .hdr{padding:9px 15px;}
+    .brand{flex-direction:column;gap:1px;align-items:flex-start;}
+    .brand .tag{display:none;}
+    .logo{font-size:1.18rem;}
+    main{padding:14px 15px 6px;overflow:visible;}
+    section{display:block;}
+    .drop{min-height:240px;padding:36px 14px;}
+    .work{display:flex;flex-direction:column;gap:14px;}
+    .preview{order:-1;}
+    .preview .photo{min-height:180px;}
+    .mini{display:grid;grid-template-columns:84px 1fr;gap:10px;align-items:center;}
+    .mini .lbl{grid-column:1/-1;margin-bottom:0;}
+    .mini .photo{max-height:none;}
+    .mini .note{display:none;}
+    .detail-panel{gap:16px;}
+    .field{width:100%;}
+    .select{width:100%;}
+    footer{padding:10px 15px;font-size:.76rem;}
+    .panel{right:12px;left:12px;width:auto;top:58px;}
+    .fab{right:16px;bottom:16px;width:52px;height:52px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="hdr">
+  <div class="brand">
+    <span class="logo">ととの<span class="ac">え</span></span>
+    <span class="tag" data-i18n="tag">note画像ととのえツール</span>
+    <span class="ver">v0.15</span>
+  </div>
+  <button class="btn-line" id="addBtn"><span data-i18n="add_btn">追加要素</span> <span class="plus">＋</span></button>
+  <span class="pro-mark hidden" id="proMark" data-i18n-title="pro_title" title="追加要素 解放済み">✓</span>
+</header>
+
+<main>
+  <!-- 投入前 -->
+  <section id="stageEmpty">
+    <div class="drop" id="drop">
+      <div class="ico">🖼</div>
+      <div class="big" data-i18n="drop_big">画像をドラッグ＆ドロップ</div>
+      <div class="mid" data-i18n="drop_mid">またはクリックして選択（1枚）</div>
+      <div class="ext">JPG / PNG / WebP</div>
+    </div>
+    <p class="lead" data-i18n-html="lead_html"><b>ドロップするだけ</b>で、note最適の<b>1920×1006px</b>に自動変換。<br>余白もきれいに整えて、そのままダウンロードできます。</p>
+  </section>
+
+  <!-- 投入後 -->
+  <section id="stageWork" class="hidden">
+    <div class="work">
+      <div class="mini">
+        <div class="lbl" data-i18n="mini_lbl">オリジナル</div>
+        <div class="photo"><img id="origImg" alt=""></div>
+        <div class="note" data-i18n="mini_note">これを元に、変換後サンプルを生成しています。</div>
+      </div>
+      <div class="preview">
+        <div class="lbl"><span data-i18n="preview_lbl">変換後サンプル</span> <span class="dim" id="prevDim">（note 1920×1006）</span></div>
+        <div class="photo"><canvas id="prevCanvas"></canvas></div>
+      </div>
+    </div>
+
+    <!-- 主役：サイズ調整 -->
+    <div class="size-control">
+      <label data-i18n="size_label">サイズ</label>
+      <input type="range" id="sizeScale" min="0.5" max="1.6" step="0.01" value="1">
+      <span class="val" id="sizeScaleVal">100%</span>
+    </div>
+
+    <!-- テキスト（無料：1行・位置下・色自動。詳細は解放後） -->
+    <div class="text-control">
+      <label data-i18n="text_label">テキスト</label>
+      <input type="text" id="textInput" maxlength="40" data-i18n-ph="text_ph" placeholder="画像に入れる文字（任意）">
+    </div>
+
+    <!-- こまかい設定（解放後のみ） -->
+    <div class="detail hidden" id="detailWrap">
+      <button class="detail-toggle" id="detailToggle"><span class="chev">▶</span> <span data-i18n="detail_toggle">こまかい設定</span></button>
+      <div class="detail-panel" id="detailPanel">
+        <div class="field">
+          <label data-i18n="f_outsize">出力サイズ</label>
+          <div class="pills" id="sizePills">
+            <button class="pill on" data-size="note">note 1920×1006</button>
+            <button class="pill" data-size="x">X 1024×512</button>
+            <button class="pill" data-size="instagram">Instagram 1080</button>
+            <button class="pill" data-size="youtube">YouTube 1280×720</button>
+            <button class="pill add" id="addSizeBtn" data-i18n="add_size">＋ 追加サイズ</button>
+            <span class="custom-form" id="customForm">
+              <input type="number" id="cw" data-i18n-ph="cw_ph" placeholder="幅" min="100" max="5000">
+              <span>×</span>
+              <input type="number" id="ch" data-i18n-ph="ch_ph" placeholder="高さ" min="100" max="5000">
+              <button id="cAdd" data-i18n="cadd">追加</button>
+            </span>
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="f_format">出力形式</label>
+          <select class="select" id="formatSel">
+            <option value="png">PNG</option>
+            <option value="jpg">JPG</option>
+            <option value="webp">WebP</option>
+          </select>
+        </div>
+        <div class="field">
+          <label data-i18n="f_pos">位置</label>
+          <div class="pos-wrap">
+            <span data-i18n="pos_x">横</span><input type="range" id="offX" min="-0.5" max="0.5" step="0.01" value="0">
+            <span data-i18n="pos_y">縦</span><input type="range" id="offY" min="-0.5" max="0.5" step="0.01" value="0">
+            <button class="mini-btn" id="posReset" data-i18n-title="pos_center" title="中央に戻す">⌖</button>
+          </div>
+        </div>
+        <div class="field">
+          <label><span data-i18n="f_bg">背景色</span> <span class="hint" data-i18n="f_bg_hint">（余白の色）</span></label>
+          <div class="swatches" id="swatches">
+            <button class="sw sel" data-color="#ffffff" style="background:#fff"></button>
+            <button class="sw" data-color="#efe9da" style="background:#efe9da"></button>
+            <button class="sw" data-color="#d8d8d8" style="background:#d8d8d8"></button>
+            <button class="sw" data-color="#5a5a5a" style="background:#5a5a5a"></button>
+            <button class="sw" data-color="#1a1a1a" style="background:#1a1a1a"></button>
+            <button class="sw custom" title="自由に選択"><input type="color" id="customColor" value="#5f8276"></button>
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="f_textpos">テキスト位置</label>
+          <div class="pills" id="textPosPills">
+            <button class="pill" data-pos="top" data-i18n="pos_top">上</button>
+            <button class="pill" data-pos="middle" data-i18n="pos_mid">中</button>
+            <button class="pill on" data-pos="bottom" data-i18n="pos_bottom">下</button>
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="f_textsize">文字サイズ</label>
+          <div class="range-wrap">
+            <input type="range" id="textSize" min="0.04" max="0.16" step="0.005" value="0.075">
+            <span class="val" id="textSizeVal">8%</span>
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="f_textcolor">文字色</label>
+          <div class="swatches" id="textSwatches">
+            <button class="sw textauto sel" data-color="auto" data-i18n="color_auto" data-i18n-title="color_auto" title="自動">自動</button>
+            <button class="sw" data-color="#ffffff" style="background:#fff"></button>
+            <button class="sw" data-color="#1d1d22" style="background:#1d1d22"></button>
+            <button class="sw custom" title="自由に選択"><input type="color" id="textCustomColor" value="#c0392b"></button>
+          </div>
+        </div>
+        <div class="field">
+          <label data-i18n="f_font">フォント</label>
+          <select class="select" id="textFontSel">
+            <option value="gothic" data-i18n="font_gothic">ゴシック</option>
+            <option value="mincho" data-i18n="font_mincho">明朝</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="resetbar"><button class="btn-reset" id="resetBtn" data-i18n="reset">↺ リセット（最初からやり直す）</button></div>
+  </section>
+</main>
+
+<footer>
+  <span data-i18n="footer_privacy">画像はブラウザ内で処理されます。サーバーに保存されません。</span>
+  <span class="foot-meta">
+    <a class="sig" href="https://note.com/kinomeno/n/n67ed8c0ac3db" target="_blank" rel="noopener" data-i18n="link_intro">note.com/kinomeno</a>
+    <span class="support-group">
+      <span class="support-label" data-i18n="support_label">応援する：</span>
+      <a href="https://ko-fi.com/kinomeno" target="_blank" rel="noopener" data-i18n="link_kofi">☕ Ko-fi</a>
+      <a href="https://note.com/kinomeno/n/n67ed8c0ac3db" target="_blank" rel="noopener" data-i18n="link_tip">♡ チップ</a>
+    </span>
+    <button class="lang-toggle" id="langToggle">EN</button>
+  </span>
+</footer>
+
+<!-- ▼ テスト用トグル（公開版では、この button と関連スクリプト・CSSを削除） -->
+<button id="testToggle" title="テスト用：解放／未解放を切替（公開版では削除）">🧪</button>
+
+<button class="fab disabled" id="fab" title="画像を入れるとダウンロードできます">
+  <svg viewBox="0 0 24 24" fill="none" stroke="#9a9aa0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/></svg>
+</button>
+
+<div class="backdrop" id="backdrop"></div>
+<div class="panel" id="panel">
+  <div class="ph"><span class="t" data-i18n="panel_title">追加要素</span><button class="x" id="panelX">✕</button></div>
+  <input type="password" id="pwInput" data-i18n-ph="pw_ph" placeholder="パスワードを入力" autocomplete="off">
+  <button class="unlock" id="unlockBtn" data-i18n="unlock_btn">解除する</button>
+  <div class="err" id="pwErr"></div>
+
+  <div class="panel-features">
+    <div class="ft" data-i18n="panel_feat_title">この追加要素でできること</div>
+    <ul>
+      <li data-i18n="feat_sizes">note以外の出力サイズに変換（X / Instagram / YouTube / カスタム）</li>
+      <li data-i18n="feat_format">出力形式を選べる（PNG / JPG / WebP）</li>
+      <li data-i18n="feat_bg">背景（余白）の色を自由に変更</li>
+      <li data-i18n="feat_tpos">テキストの位置を変更</li>
+      <li data-i18n="feat_tsize">テキストのサイズを変更</li>
+      <li data-i18n="feat_tcolor">テキストの色を変更</li>
+      <li data-i18n="feat_tfont">テキストのフォントを変更</li>
+    </ul>
+  </div>
+  <a class="get-cta" href="https://note.com/kinomeno/n/n67ed8c0ac3db" target="_blank" rel="noopener" data-i18n="get_cta">パスワードはまだ？ 紹介記事でGETしよう →</a>
+</div>
+
+<input type="file" id="fileInput" accept="image/*" class="hidden">
+
+<script>
+// ============================================================
+const UNLOCK_HASH="2ff356f2ce3da91cbaf702ab1e26f1f0253a07a301bc106dcebde5ac6825f250"; // sha256("ttnoe")
+const STORE_KEY="ttnoe_premium";
+const DETAIL_KEY="ttnoe_detail_open";
+// テスト用🧪トグル：localhost / file:// では自動でON（開発）、公開ドメインでは自動OFF（クリーン）
+const TEST_MODE = (location.hostname==="localhost" || location.hostname==="127.0.0.1" || location.protocol==="file:");
+
+const FILL_W=0.58, FILL_H=0.71, WHITE_THRESH=240, PAD=60;
+const SIZE_PRESETS={
+  note:{label:"note",w:1920,h:1006},
+  x:{label:"X",w:1024,h:512},
+  instagram:{label:"Instagram",w:1080,h:1080},
+  youtube:{label:"YouTube",w:1280,h:720},
+};
+
+const state={ unlocked:false, file:null, img:null, objUrl:null,
+  selectedSizes:["note"], format:"png", bgColor:"#ffffff", sizeScale:1.0,
+  offsetX:0, offsetY:0,
+  text:"", textPos:"bottom", textSizeFactor:0.075, textColor:"auto", textFont:"gothic" };
+
+const $=id=>document.getElementById(id);
+const drop=$("drop"), fileInput=$("fileInput");
+const stageEmpty=$("stageEmpty"), stageWork=$("stageWork");
+const origImg=$("origImg"), prevCanvas=$("prevCanvas"), prevDim=$("prevDim");
+const fab=$("fab"), resetBtn=$("resetBtn");
+const addBtn=$("addBtn"), proMark=$("proMark");
+const panel=$("panel"), backdrop=$("backdrop"), panelX=$("panelX");
+const pwInput=$("pwInput"), unlockBtn=$("unlockBtn"), pwErr=$("pwErr");
+const detailWrap=$("detailWrap"), detailToggle=$("detailToggle");
+const sizePills=$("sizePills"), formatSel=$("formatSel"), swatches=$("swatches");
+const addSizeBtn=$("addSizeBtn"), customForm=$("customForm");
+const sizeScale=$("sizeScale"), sizeScaleVal=$("sizeScaleVal");
+const textInput=$("textInput"), textPosPills=$("textPosPills"), textSize=$("textSize"),
+      textSizeVal=$("textSizeVal"), textSwatches=$("textSwatches"), textFontSel=$("textFontSel");
+const offX=$("offX"), offY=$("offY"), posReset=$("posReset");
+const langToggle=$("langToggle");
+
+// ============================================================
+// 多言語（日/英）
+// ============================================================
+const I18N={
+  ja:{
+    tag:"note画像ととのえツール", add_btn:"追加要素", pro_title:"追加要素 解放済み",
+    drop_big:"画像をドラッグ＆ドロップ", drop_mid:"またはクリックして選択（1枚）",
+    lead_html:"<b>ドロップするだけ</b>で、note最適の<b>1920×1006px</b>に自動変換。<br>余白もきれいに整えて、そのままダウンロードできます。",
+    mini_lbl:"オリジナル", mini_note:"これを元に、変換後サンプルを生成しています。",
+    preview_lbl:"変換後サンプル", size_label:"サイズ", text_label:"テキスト",
+    text_ph:"画像に入れる文字（任意）", detail_toggle:"こまかい設定",
+    f_outsize:"出力サイズ", add_size:"＋ 追加サイズ", cw_ph:"幅", ch_ph:"高さ", cadd:"追加",
+    f_format:"出力形式", f_bg:"背景色", f_bg_hint:"（余白の色）",
+    f_textpos:"テキスト位置", pos_top:"上", pos_mid:"中", pos_bottom:"下",
+    f_textsize:"文字サイズ", f_textcolor:"文字色", color_auto:"自動",
+    f_font:"フォント", font_gothic:"ゴシック", font_mincho:"明朝",
+    reset:"↺ リセット（最初からやり直す）",
+    footer_privacy:"画像はブラウザ内で処理されます。サーバーに保存されません。",
+    author:"キノメノ", link_intro:"note.com/kinomeno", link_kofi:"☕ Ko-fi", link_tip:"♡ チップ", support_label:"応援する：",
+    f_pos:"位置", pos_x:"横", pos_y:"縦", pos_center:"中央に戻す",
+    panel_title:"追加要素", panel_desc:"パスワードを入力すると、追加要素のロックが解除されます。",
+    panel_feat_title:"この追加要素でできること",
+    feat_sizes:"note以外の出力サイズに変換（X / Instagram / YouTube / カスタム）",
+    feat_format:"出力形式を選べる（PNG / JPG / WebP）",
+    feat_bg:"背景（余白）の色を自由に変更",
+    feat_tpos:"テキストの位置を変更", feat_tsize:"テキストのサイズを変更",
+    feat_tcolor:"テキストの色を変更", feat_tfont:"テキストのフォントを変更",
+    pw_ph:"パスワードを入力", unlock_btn:"解除する",
+    get_cta:"パスワードはまだ？ 紹介記事でGETしよう →",
+    err_empty:"パスワードを入力してください。", err_wrong:"パスワードが正しくありません。",
+    fab_disabled:"画像を入れるとダウンロードできます", fab_ready:"ダウンロード",
+    test_locked:"🧪 未解放（クリックで解放）", test_unlocked:"🧪 解放中（クリックで未解放）",
+    alert_badimg:"画像を読み込めませんでした。別のファイルをお試しください。",
+    alert_customsize:"幅・高さを正しく入力してください（100以上）",
+    paren_o:"（", paren_c:"）"
+  },
+  en:{
+    tag:"Image fitter for note", add_btn:"Add-ons", pro_title:"Add-ons unlocked",
+    drop_big:"Drag & drop an image", drop_mid:"or click to select (1 image)",
+    lead_html:"<b>Just drop</b> to auto-fit note's ideal <b>1920×1006px</b>.<br>Margins are tidied up, ready to download.",
+    mini_lbl:"Original", mini_note:"Used to generate the preview.",
+    preview_lbl:"Preview", size_label:"Size", text_label:"Text",
+    text_ph:"Text on the image (optional)", detail_toggle:"Advanced settings",
+    f_outsize:"Output size", add_size:"＋ Custom size", cw_ph:"W", ch_ph:"H", cadd:"Add",
+    f_format:"Format", f_bg:"Background", f_bg_hint:"(margin color)",
+    f_textpos:"Text position", pos_top:"Top", pos_mid:"Middle", pos_bottom:"Bottom",
+    f_textsize:"Text size", f_textcolor:"Text color", color_auto:"Auto",
+    f_font:"Font", font_gothic:"Sans", font_mincho:"Serif",
+    reset:"↺ Reset (start over)",
+    footer_privacy:"Images are processed in your browser — nothing is uploaded.",
+    author:"Kinomeno", link_intro:"note.com/kinomeno", link_kofi:"☕ Ko-fi", link_tip:"♡ Tip", support_label:"Support →",
+    f_pos:"Position", pos_x:"X", pos_y:"Y", pos_center:"Center",
+    panel_title:"Add-ons", panel_desc:"Enter the password to unlock the add-ons.",
+    panel_feat_title:"What you can do with add-ons",
+    feat_sizes:"Convert to other sizes (X / Instagram / YouTube / custom)",
+    feat_format:"Choose output format (PNG / JPG / WebP)",
+    feat_bg:"Freely change the margin background color",
+    feat_tpos:"Change text position", feat_tsize:"Change text size",
+    feat_tcolor:"Change text color", feat_tfont:"Change text font",
+    pw_ph:"Enter password", unlock_btn:"Unlock",
+    get_cta:"No password yet? Get it in the article →",
+    err_empty:"Please enter the password.", err_wrong:"Incorrect password.",
+    fab_disabled:"Add an image to enable download", fab_ready:"Download",
+    test_locked:"🧪 locked (click to unlock)", test_unlocked:"🧪 unlocked (click to lock)",
+    alert_badimg:"Couldn't load the image. Try another file.",
+    alert_customsize:"Enter a valid width/height (100 or more).",
+    paren_o:"(", paren_c:")"
+  }
+};
+let LANG=localStorage.getItem("ttnoe_lang") || ((navigator.language||"ja").toLowerCase().startsWith("en")?"en":"ja");
+function t(k){return (I18N[LANG]&&I18N[LANG][k])||I18N.ja[k]||k;}
+function applyI18n(){
+  document.documentElement.lang=LANG;
+  document.querySelectorAll("[data-i18n]").forEach(el=>el.textContent=t(el.dataset.i18n));
+  document.querySelectorAll("[data-i18n-html]").forEach(el=>el.innerHTML=t(el.dataset.i18nHtml));
+  document.querySelectorAll("[data-i18n-ph]").forEach(el=>el.placeholder=t(el.dataset.i18nPh));
+  document.querySelectorAll("[data-i18n-title]").forEach(el=>el.title=t(el.dataset.i18nTitle));
+  langToggle.textContent = LANG==="ja" ? "EN" : "日本語";
+  fab.title = state.img ? t("fab_ready") : t("fab_disabled");
+  updateTestToggle();
+  if(state.img) renderPreview();
+}
+function setLang(l){LANG=l;localStorage.setItem("ttnoe_lang",l);applyI18n();}
+
+init();
+function init(){
+  // テスト用: ?lock=1 でパスワード前（ロック）状態を表示（記憶も解除）
+  const params=new URLSearchParams(location.search);
+  if(params.get("lock")==="1"){
+    localStorage.removeItem(STORE_KEY);
+  }else if(localStorage.getItem(STORE_KEY)==="1") setUnlocked(true);
+
+  drop.addEventListener("click",()=>fileInput.click());
+  ["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+  drop.addEventListener("drop",e=>{const f=[...(e.dataTransfer.files||[])].find(x=>x.type.startsWith("image/"));if(f)handleFile(f);});
+  ["dragover","drop"].forEach(ev=>window.addEventListener(ev,e=>e.preventDefault()));
+  window.addEventListener("drop",e=>{const f=[...(e.dataTransfer.files||[])].find(x=>x.type.startsWith("image/"));if(f)handleFile(f);});
+  fileInput.addEventListener("change",()=>{if(fileInput.files[0])handleFile(fileInput.files[0]);fileInput.value="";});
+
+  fab.addEventListener("click",download);
+  resetBtn.addEventListener("click",reset);
+
+  addBtn.addEventListener("click",openPanel);
+  proMark.addEventListener("click",openPanel);
+  panelX.addEventListener("click",closePanel);
+  backdrop.addEventListener("click",closePanel);
+  unlockBtn.addEventListener("click",tryUnlock);
+  pwInput.addEventListener("keydown",e=>{if(e.key==="Enter")tryUnlock();});
+
+  detailToggle.addEventListener("click",toggleDetail);
+  sizePills.addEventListener("click",onSizeClick);
+  formatSel.addEventListener("change",()=>state.format=formatSel.value);
+  swatches.addEventListener("click",onSwatchClick);
+  $("customColor").addEventListener("input",e=>setBg(e.target.value,e.target.parentElement));
+  addSizeBtn.addEventListener("click",()=>customForm.classList.toggle("show"));
+  $("cAdd").addEventListener("click",addCustomSize);
+  sizeScale.addEventListener("input",()=>{state.sizeScale=parseFloat(sizeScale.value);sizeScaleVal.textContent=Math.round(state.sizeScale*100)+"%";renderPreview();});
+
+  // テキスト（無料：入力。詳細は解放後）
+  textInput.addEventListener("input",()=>{state.text=textInput.value;renderPreview();});
+  textPosPills.addEventListener("click",e=>{const b=e.target.closest(".pill[data-pos]");if(!b)return;
+    state.textPos=b.dataset.pos;[...textPosPills.querySelectorAll(".pill")].forEach(p=>p.classList.remove("on"));b.classList.add("on");renderPreview();});
+  textSize.addEventListener("input",()=>{state.textSizeFactor=parseFloat(textSize.value);textSizeVal.textContent=Math.round(state.textSizeFactor*100)+"%";renderPreview();});
+  textSwatches.addEventListener("click",e=>{const b=e.target.closest(".sw");if(!b||b.classList.contains("custom"))return;setTextColor(b.dataset.color,b);});
+  $("textCustomColor").addEventListener("input",e=>setTextColor(e.target.value,e.target.parentElement));
+  textFontSel.addEventListener("change",()=>{state.textFont=textFontSel.value;renderPreview();});
+
+  // 位置調整（解放後）
+  offX.addEventListener("input",()=>{state.offsetX=parseFloat(offX.value);renderPreview();});
+  offY.addEventListener("input",()=>{state.offsetY=parseFloat(offY.value);renderPreview();});
+  posReset.addEventListener("click",()=>setOffset(0,0));
+
+  setupGestures();
+
+  // 言語切替
+  langToggle.addEventListener("click",()=>setLang(LANG==="ja"?"en":"ja"));
+
+  // テスト用トグル（TEST_MODE=false で無効化＝公開版）
+  if(TEST_MODE){
+    $("testToggle").addEventListener("click",()=>{
+      if(state.unlocked){ lockUI(); } else { localStorage.setItem(STORE_KEY,"1"); setUnlocked(true); }
+      updateTestToggle();
+    });
+  } else {
+    const tb=$("testToggle"); if(tb) tb.remove();
+  }
+
+  applyI18n();
+}
+
+// テスト用（公開版では削除）
+function lockUI(){
+  localStorage.removeItem(STORE_KEY); state.unlocked=false;
+  addBtn.classList.remove("hidden"); proMark.classList.add("hidden");
+  detailWrap.classList.add("hidden"); detailWrap.classList.remove("open");
+  updateGrabCursor();
+}
+function updateTestToggle(){
+  const b=$("testToggle"); if(b) b.textContent = state.unlocked ? t("test_unlocked") : t("test_locked");
+}
+
+function handleFile(file){
+  if(state.objUrl)URL.revokeObjectURL(state.objUrl);
+  state.file=file;
+  const url=URL.createObjectURL(file);
+  state.objUrl=url;
+  const img=new Image();
+  img.onload=()=>{
+    state.img=img;
+    origImg.src=url;
+    stageEmpty.classList.add("hidden");
+    stageWork.classList.remove("hidden");
+    fab.classList.remove("disabled");
+    fab.title=t("fab_ready");
+    fab.querySelector("svg").setAttribute("stroke","#fff");
+    renderPreview();
+    updateGrabCursor();
+  };
+  img.onerror=()=>alert(t("alert_badimg"));
+  img.src=url;
+}
+
+function renderPreview(){
+  if(!state.img)return;
+  const key=primarySize();
+  const p=SIZE_PRESETS[key];
+  const cv=processToCanvas(state.img,p.w,p.h,state.bgColor,state.sizeScale);
+  prevCanvas.width=cv.width; prevCanvas.height=cv.height;
+  prevCanvas.getContext("2d").drawImage(cv,0,0);
+  prevDim.textContent=`${t("paren_o")}${p.label} ${p.w}×${p.h}${t("paren_c")}`;
+}
+
+function primarySize(){
+  const order=[...sizePills.querySelectorAll(".pill[data-size]")].map(b=>b.dataset.size);
+  for(const k of order)if(state.selectedSizes.includes(k))return k;
+  return state.selectedSizes[0]||"note";
+}
+
+function processToCanvas(img,W,H,bg,scaleMul){
+  scaleMul=scaleMul||1;
+  const iw=img.naturalWidth, ih=img.naturalHeight;
+  const src=document.createElement("canvas");
+  src.width=iw; src.height=ih;
+  const sx=src.getContext("2d");
+  sx.fillStyle=bg; sx.fillRect(0,0,iw,ih);
+  sx.drawImage(img,0,0);
+
+  const ds=3;
+  const sw=Math.max(1,Math.floor(iw/ds)), sh=Math.max(1,Math.floor(ih/ds));
+  const sm=document.createElement("canvas"); sm.width=sw; sm.height=sh;
+  const smx=sm.getContext("2d"); smx.drawImage(src,0,0,sw,sh);
+  const data=smx.getImageData(0,0,sw,sh).data;
+  let minX=sw,maxX=0,minY=sh,maxY=0,found=false;
+  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){const i=(y*sw+x)*4;
+    if(data[i]<WHITE_THRESH||data[i+1]<WHITE_THRESH||data[i+2]<WHITE_THRESH){
+      if(x<minX)minX=x;if(x>maxX)maxX=x;if(y<minY)minY=y;if(y>maxY)maxY=y;found=true;}}
+  let cx1,cy1,cw,ch;
+  if(!found){cx1=0;cy1=0;cw=iw;ch=ih;}
+  else{cx1=Math.max(0,minX*ds-PAD);cy1=Math.max(0,minY*ds-PAD);
+    cw=Math.min(iw,maxX*ds+PAD)-cx1;ch=Math.min(ih,maxY*ds+PAD)-cy1;}
+
+  let scale=Math.min(W*FILL_W/cw,H*FILL_H/ch)*scaleMul;
+  let nw=Math.round(cw*scale), nh=Math.round(ch*scale);
+  if(nw>W){nh=Math.round(nh*W/nw);nw=W;}
+  if(nh>H){nw=Math.round(nw*H/nh);nh=H;}
+  nw=Math.max(1,nw); nh=Math.max(1,nh);
+
+  const out=document.createElement("canvas"); out.width=W; out.height=H;
+  const ox=out.getContext("2d"); ox.imageSmoothingQuality="high";
+  ox.fillStyle=bg; ox.fillRect(0,0,W,H);
+  let px=(W-nw)/2 + state.offsetX*W, py=(H-nh)/2 + state.offsetY*H;
+  px=Math.max(Math.min(px, W-nw), Math.min(0, W-nw));
+  py=Math.max(Math.min(py, H-nh), Math.min(0, H-nh));
+  ox.drawImage(src,cx1,cy1,cw,ch,px,py,nw,nh);
+  drawText(ox,W,H,bg);
+  return out;
+}
+
+function hexToRgb(hex){
+  let h=(hex||"#ffffff").replace("#","");
+  if(h.length===3)h=h.split("").map(c=>c+c).join("");
+  return {r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),b:parseInt(h.slice(4,6),16)};
+}
+function drawText(ctx,W,H,bg){
+  const t=(state.text||"").trim(); if(!t)return;
+  const px=Math.max(8,Math.round(H*state.textSizeFactor));
+  const fam=state.textFont==="mincho"
+    ? '"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif'
+    : '"Hiragino Kaku Gothic ProN","Yu Gothic UI","Meiryo",sans-serif';
+  ctx.font=`700 ${px}px ${fam}`;
+  ctx.textAlign="center"; ctx.textBaseline="middle";
+  let col;
+  if(state.textColor==="auto"){
+    const c=hexToRgb(bg); const lum=(c.r*299+c.g*587+c.b*114)/1000;
+    col=lum<140?"#ffffff":"#1d1d22";
+  }else col=state.textColor;
+  const margin=Math.round(H*0.08), x=W/2;
+  let y; if(state.textPos==="top")y=margin+px/2; else if(state.textPos==="middle")y=H/2; else y=H-margin-px/2;
+  const outline=(col.toLowerCase()==="#ffffff")?"rgba(0,0,0,.45)":"rgba(255,255,255,.65)";
+  ctx.lineJoin="round"; ctx.lineWidth=Math.max(2,px*0.12); ctx.strokeStyle=outline;
+  ctx.strokeText(t,x,y);
+  ctx.fillStyle=col; ctx.fillText(t,x,y);
+}
+
+// ダウンロード
+function mime(f){return f==="jpg"?"image/jpeg":f==="webp"?"image/webp":"image/png";}
+function baseName(){return (state.file?.name||"image").replace(/\.[^.]+$/,"");}
+async function download(){
+  if(!state.img)return;
+  const fmt=state.format, ext=fmt;
+  const sizes=state.selectedSizes.length?state.selectedSizes:["note"];
+  if(sizes.length===1){
+    const p=SIZE_PRESETS[sizes[0]];
+    const cv=processToCanvas(state.img,p.w,p.h,state.bgColor,state.sizeScale);
+    saveBlob(await toBlob(cv,fmt),`${baseName()}_${p.label}.${ext}`); return;
+  }
+  await ensureJSZip();
+  const zip=new JSZip();
+  for(const k of sizes){const p=SIZE_PRESETS[k];
+    const cv=processToCanvas(state.img,p.w,p.h,state.bgColor,state.sizeScale);
+    zip.file(`${baseName()}_${p.label}.${ext}`,await toBlob(cv,fmt));}
+  saveBlob(await zip.generateAsync({type:"blob"}),`${baseName()}_ととのえ.zip`);
+}
+function toBlob(c,f){const q=(f==="jpg"||f==="webp")?0.95:undefined;return new Promise(r=>c.toBlob(r,mime(f),q));}
+function saveBlob(b,n){const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=n;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}
+async function ensureJSZip(){if(window.JSZip)return;await new Promise((res,rej)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";s.onload=res;s.onerror=rej;document.head.appendChild(s);});}
+
+function reset(){
+  if(state.objUrl){URL.revokeObjectURL(state.objUrl);state.objUrl=null;}
+  state.file=null; state.img=null;
+  origImg.removeAttribute("src");
+  stageWork.classList.add("hidden");
+  stageEmpty.classList.remove("hidden");
+  fab.classList.add("disabled");
+  fab.title=t("fab_disabled");
+  fab.querySelector("svg").setAttribute("stroke","#9a9aa0");
+  updateGrabCursor();
+}
+
+// 解放
+function openPanel(){panel.classList.add("show");backdrop.classList.add("show");pwErr.textContent="";pwInput.focus();}
+function closePanel(){panel.classList.remove("show");backdrop.classList.remove("show");}
+async function tryUnlock(){
+  const v=pwInput.value.trim();
+  if(!v){pwErr.textContent=t("err_empty");return;}
+  if(await sha256(v)===UNLOCK_HASH){localStorage.setItem(STORE_KEY,"1");setUnlocked(true);closePanel();pwInput.value="";}
+  else pwErr.textContent=t("err_wrong");
+}
+function setUnlocked(on){
+  state.unlocked=on;
+  if(on){
+    addBtn.classList.add("hidden");
+    proMark.classList.remove("hidden");
+    detailWrap.classList.remove("hidden");
+    if(localStorage.getItem(DETAIL_KEY)==="1") detailWrap.classList.add("open");
+  }
+  updateGrabCursor();
+}
+async function sha256(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");}
+
+// こまかい設定
+function toggleDetail(){
+  detailWrap.classList.toggle("open");
+  localStorage.setItem(DETAIL_KEY,detailWrap.classList.contains("open")?"1":"0");
+}
+function onSizeClick(e){
+  const b=e.target.closest(".pill[data-size]"); if(!b)return;
+  const key=b.dataset.size, i=state.selectedSizes.indexOf(key);
+  if(i>=0){if(state.selectedSizes.length===1)return;state.selectedSizes.splice(i,1);b.classList.remove("on");}
+  else{state.selectedSizes.push(key);b.classList.add("on");}
+  renderPreview();
+}
+function addCustomSize(){
+  const w=parseInt($("cw").value,10), h=parseInt($("ch").value,10);
+  if(!w||!h||w<100||h<100){alert(t("alert_customsize"));return;}
+  SIZE_PRESETS.custom={label:"カスタム",w,h};
+  let pill=sizePills.querySelector('.pill[data-size="custom"]');
+  if(!pill){pill=document.createElement("button");pill.className="pill on";pill.dataset.size="custom";sizePills.insertBefore(pill,addSizeBtn);}
+  else pill.classList.add("on");
+  pill.textContent=`カスタム ${w}×${h}`;
+  if(!state.selectedSizes.includes("custom"))state.selectedSizes.push("custom");
+  customForm.classList.remove("show"); renderPreview();
+}
+function onSwatchClick(e){const b=e.target.closest(".sw");if(!b||b.classList.contains("custom"))return;setBg(b.dataset.color,b);}
+function setBg(color,el){state.bgColor=color;[...swatches.querySelectorAll(".sw")].forEach(s=>s.classList.remove("sel"));if(el)el.classList.add("sel");renderPreview();}
+function setTextColor(color,el){state.textColor=color;[...textSwatches.querySelectorAll(".sw")].forEach(s=>s.classList.remove("sel"));if(el)el.classList.add("sel");renderPreview();}
+function clamp(v,a,b){return Math.max(a,Math.min(b,v));}
+function setSizeScale(v){state.sizeScale=clamp(v,0.5,1.6);sizeScale.value=state.sizeScale;sizeScaleVal.textContent=Math.round(state.sizeScale*100)+"%";renderPreview();}
+function setOffset(x,y){state.offsetX=clamp(x,-0.5,0.5);state.offsetY=clamp(y,-0.5,0.5);offX.value=state.offsetX;offY.value=state.offsetY;renderPreview();}
+
+// ② ジェスチャ操作（モバイル：2本指ピンチ=サイズ／1本指ドラッグ=位置）＋デスクトップのドラッグ
+function setupGestures(){
+  const tdist=t=>Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY);
+  let g=null;
+  prevCanvas.addEventListener("touchstart",e=>{
+    if(!state.img)return;
+    if(e.touches.length===2) g={mode:"pinch",d:tdist(e.touches),s:state.sizeScale};
+    else if(e.touches.length===1) g={mode:"pan",x:e.touches[0].clientX,y:e.touches[0].clientY,ox:state.offsetX,oy:state.offsetY};
+  },{passive:true});
+  prevCanvas.addEventListener("touchmove",e=>{
+    if(!g||!state.img)return;
+    const r=prevCanvas.getBoundingClientRect();
+    if(g.mode==="pinch"&&e.touches.length===2){ e.preventDefault(); setSizeScale(g.s*tdist(e.touches)/g.d); }
+    else if(g.mode==="pan"&&e.touches.length===1){ if(!state.unlocked)return; e.preventDefault();
+      setOffset(g.ox+(e.touches[0].clientX-g.x)/r.width, g.oy+(e.touches[0].clientY-g.y)/r.height); }
+  },{passive:false});
+  prevCanvas.addEventListener("touchend",()=>{g=null;});
+  // デスクトップ：ドラッグで位置（解放後）
+  let m=null;
+  prevCanvas.addEventListener("mousedown",e=>{ if(!state.img||!state.unlocked)return; m={x:e.clientX,y:e.clientY,ox:state.offsetX,oy:state.offsetY}; e.preventDefault(); });
+  window.addEventListener("mousemove",e=>{ if(!m)return; const r=prevCanvas.getBoundingClientRect();
+    setOffset(m.ox+(e.clientX-m.x)/r.width, m.oy+(e.clientY-m.y)/r.height); });
+  window.addEventListener("mouseup",()=>{m=null;});
+}
+function updateGrabCursor(){ prevCanvas.classList.toggle("grabbable", !!state.img && state.unlocked); }
+</script>
+</body>
+</html>
