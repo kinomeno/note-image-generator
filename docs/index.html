@@ -46,7 +46,7 @@
     cursor:pointer;}
 
   /* メイン（縦スクロールを出さない） */
-  main{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:16px 26px 6px;}
+  main{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;padding:16px 26px 6px;overflow:hidden auto;}
   section{flex:1 1 auto;min-height:0;display:flex;flex-direction:column;}
 
   /* 投入前 */
@@ -142,6 +142,8 @@
   .foot-meta a{color:var(--sub);text-decoration:none;font-weight:500;transition:color .15s;letter-spacing:.01em;}
   .foot-meta a:hover{color:var(--accent-deep);}
   .foot-meta .sig{color:var(--accent-deep);font-weight:600;}
+  .credit{display:inline-flex;align-items:center;gap:8px;}
+  .credit .author{color:var(--ink);font-weight:700;}
   .support-group{display:inline-flex;align-items:center;gap:9px;padding:3px 11px;
     background:var(--accent-soft);border:1px solid #d8e7e1;border-radius:999px;}
   .support-label{font-size:.72rem;font-weight:700;color:var(--accent-deep);letter-spacing:.02em;}
@@ -170,6 +172,15 @@
   .fab:hover{background:#1f1f24;transform:translateY(-1px);}
   .fab.disabled{background:#d7d7db;box-shadow:none;cursor:default;transform:none;}
   .fab svg{width:25px;height:25px;}
+
+  /* モバイル用：変換後サンプルのフロート追従 */
+  #floatPreview{position:fixed;top:54px;right:12px;z-index:25;display:none;cursor:grab;touch-action:none;
+    background:#fff;border:1px solid var(--line);border-radius:9px;padding:4px;
+    box-shadow:0 6px 18px rgba(20,20,30,.18);}
+  #floatPreview:active{cursor:grabbing;}
+  #floatPreview.show{display:block;}
+  #floatPreview canvas{display:block;width:150px;height:auto;border-radius:5px;}
+  @media (min-width:761px){ #floatPreview{display:none !important;} }
 
   /* パネル */
   .backdrop{position:fixed;inset:0;background:rgba(20,20,28,.16);z-index:40;display:none;}
@@ -230,7 +241,7 @@
   <div class="brand">
     <span class="logo">ととの<span class="ac">え</span></span>
     <span class="tag" data-i18n="tag">note画像ととのえツール</span>
-    <span class="ver">v0.15</span>
+    <span class="ver">v0.16</span>
   </div>
   <button class="btn-line" id="addBtn"><span data-i18n="add_btn">追加要素</span> <span class="plus">＋</span></button>
   <span class="pro-mark hidden" id="proMark" data-i18n-title="pro_title" title="追加要素 解放済み">✓</span>
@@ -363,7 +374,10 @@
 <footer>
   <span data-i18n="footer_privacy">画像はブラウザ内で処理されます。サーバーに保存されません。</span>
   <span class="foot-meta">
-    <a class="sig" href="https://note.com/kinomeno/n/n67ed8c0ac3db" target="_blank" rel="noopener" data-i18n="link_intro">note.com/kinomeno</a>
+    <span class="credit">
+      <span class="author" data-i18n="author">キノメノ</span>
+      <a class="sig" href="https://note.com/kinomeno/n/n67ed8c0ac3db" target="_blank" rel="noopener" data-i18n="link_intro">note.com/kinomeno</a>
+    </span>
     <span class="support-group">
       <span class="support-label" data-i18n="support_label">応援する：</span>
       <a href="https://ko-fi.com/kinomeno" target="_blank" rel="noopener" data-i18n="link_kofi">☕ Ko-fi</a>
@@ -372,6 +386,9 @@
     <button class="lang-toggle" id="langToggle">EN</button>
   </span>
 </footer>
+
+<!-- モバイル：スクロール時に変換後サンプルを小さくフロート追従 -->
+<div id="floatPreview" title="変換後サンプル（ドラッグで移動・2本指ピンチで拡大縮小）"><canvas id="floatCanvas"></canvas></div>
 
 <!-- ▼ テスト用トグル（公開版では、この button と関連スクリプト・CSSを削除） -->
 <button id="testToggle" title="テスト用：解放／未解放を切替（公開版では削除）">🧪</button>
@@ -441,6 +458,8 @@ const textInput=$("textInput"), textPosPills=$("textPosPills"), textSize=$("text
       textSizeVal=$("textSizeVal"), textSwatches=$("textSwatches"), textFontSel=$("textFontSel");
 const offX=$("offX"), offY=$("offY"), posReset=$("posReset");
 const langToggle=$("langToggle");
+const floatPreview=$("floatPreview"), floatCanvas=$("floatCanvas");
+let floatW=parseInt(localStorage.getItem("ttnoe_float_w"))||150;
 
 // ============================================================
 // 多言語（日/英）
@@ -577,6 +596,21 @@ function init(){
 
   setupGestures();
 
+  // モバイル：変換後サンプルがスクロールで隠れたら、小さくフロート追従
+  if(window.IntersectionObserver){
+    const io=new IntersectionObserver(es=>{
+      const e=es[0], mobile=matchMedia("(max-width:760px)").matches;
+      floatPreview.classList.toggle("show", !!state.img && mobile && !e.isIntersecting);
+    },{threshold:0});
+    io.observe(document.querySelector(".preview .photo"));
+  }
+  // 保存された位置を復元＋指でドラッグ移動
+  const _fp=localStorage.getItem("ttnoe_float_pos");
+  if(_fp){ try{ const p=JSON.parse(_fp); floatPreview.style.left=p.left+"px"; floatPreview.style.top=p.top+"px"; floatPreview.style.right="auto"; }catch(e){} }
+  floatCanvas.style.width=floatW+"px";
+  setupFloatDrag();
+  window.addEventListener("resize",()=>{ if(!matchMedia("(max-width:760px)").matches) floatPreview.classList.remove("show"); clampFloat(); });
+
   // 言語切替
   langToggle.addEventListener("click",()=>setLang(LANG==="ja"?"en":"ja"));
 
@@ -632,6 +666,7 @@ function renderPreview(){
   const cv=processToCanvas(state.img,p.w,p.h,state.bgColor,state.sizeScale);
   prevCanvas.width=cv.width; prevCanvas.height=cv.height;
   prevCanvas.getContext("2d").drawImage(cv,0,0);
+  if(floatCanvas){ floatCanvas.width=cv.width; floatCanvas.height=cv.height; floatCanvas.getContext("2d").drawImage(cv,0,0); }
   prevDim.textContent=`${t("paren_o")}${p.label} ${p.w}×${p.h}${t("paren_c")}`;
 }
 
@@ -739,6 +774,7 @@ function reset(){
   fab.classList.add("disabled");
   fab.title=t("fab_disabled");
   fab.querySelector("svg").setAttribute("stroke","#9a9aa0");
+  floatPreview.classList.remove("show");
   updateGrabCursor();
 }
 
@@ -818,6 +854,44 @@ function setupGestures(){
   window.addEventListener("mouseup",()=>{m=null;});
 }
 function updateGrabCursor(){ prevCanvas.classList.toggle("grabbable", !!state.img && state.unlocked); }
+
+// フロートサンプルを指/マウスでドラッグ移動（タップは先頭へ）
+function setFloatW(w){ floatW=Math.max(90,Math.min(Math.round(w),Math.min(innerWidth-24,360))); floatCanvas.style.width=floatW+"px"; }
+function clampFloat(){
+  if(!floatPreview.style.left) return;
+  const w=floatPreview.offsetWidth||floatW+10, h=floatPreview.offsetHeight||98;
+  let l=parseInt(floatPreview.style.left)||0, t=parseInt(floatPreview.style.top)||0;
+  l=Math.max(6,Math.min(l,innerWidth-w-6)); t=Math.max(6,Math.min(t,innerHeight-h-6));
+  floatPreview.style.left=l+"px"; floatPreview.style.top=t+"px";
+}
+function setupFloatDrag(){
+  let g=null;
+  const dist=tt=>Math.hypot(tt[0].clientX-tt[1].clientX, tt[0].clientY-tt[1].clientY);
+  const savePos=()=>localStorage.setItem("ttnoe_float_pos",JSON.stringify({left:parseInt(floatPreview.style.left)||0,top:parseInt(floatPreview.style.top)||0}));
+  const moveTo=(x,y)=>{ const w=floatPreview.offsetWidth,h=floatPreview.offsetHeight;
+    floatPreview.style.left=Math.max(6,Math.min(g.left+(x-g.x),innerWidth-w-6))+"px";
+    floatPreview.style.top=Math.max(6,Math.min(g.top+(y-g.y),innerHeight-h-6))+"px"; floatPreview.style.right="auto"; };
+  // タッチ：1本指=移動／2本指ピンチ=拡大縮小
+  floatPreview.addEventListener("touchstart",e=>{
+    if(e.touches.length===2){ g={mode:"pinch",d:dist(e.touches),w:floatW}; }
+    else if(e.touches.length===1){ const r=floatPreview.getBoundingClientRect(); g={mode:"drag",x:e.touches[0].clientX,y:e.touches[0].clientY,left:r.left,top:r.top}; }
+  },{passive:true});
+  floatPreview.addEventListener("touchmove",e=>{
+    if(!g) return;
+    if(g.mode==="pinch" && e.touches.length===2){ e.preventDefault(); setFloatW(g.w*dist(e.touches)/g.d); clampFloat(); }
+    else if(g.mode==="drag" && e.touches.length===1){ e.preventDefault(); moveTo(e.touches[0].clientX,e.touches[0].clientY); }
+  },{passive:false});
+  floatPreview.addEventListener("touchend",()=>{
+    if(!g) return;
+    if(g.mode==="drag") savePos();
+    if(g.mode==="pinch") localStorage.setItem("ttnoe_float_w",String(floatW));
+    g=null;
+  });
+  // デスクトップ：マウスドラッグで移動（フロートはモバイル専用だが無害）
+  floatPreview.addEventListener("mousedown",e=>{ const r=floatPreview.getBoundingClientRect(); g={mode:"drag",x:e.clientX,y:e.clientY,left:r.left,top:r.top}; e.preventDefault(); });
+  window.addEventListener("mousemove",e=>{ if(g&&g.mode==="drag") moveTo(e.clientX,e.clientY); });
+  window.addEventListener("mouseup",()=>{ if(g&&g.mode==="drag") savePos(); g=null; });
+}
 </script>
 </body>
 </html>
